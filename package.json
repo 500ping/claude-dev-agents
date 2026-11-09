@@ -1,0 +1,41 @@
+{
+  "name": "cd-agents",
+  "version": "0.1.0",
+  "description": "Two-role (Tech Lead + Senior Dev) workflow CLI built on top of Claude Code",
+  "type": "module",
+  "bin": {
+    "cd-agents": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "prompts",
+    "scripts",
+    "install.sh"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "preinstall": "node scripts/check-claude.mjs",
+    "postinstall": "node scripts/postinstall.mjs",
+    "build": "tsc -p tsconfig.json && node scripts/make-executable.mjs",
+    "dev": "tsx src/cli.tsx",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^15.1.0",
+    "ink": "^8.0.0",
+    "react": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "ink-testing-library": "^4.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

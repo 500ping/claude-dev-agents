@@ -1,0 +1,4 @@
+node_modules
+dist
+.cd-agents/runs/
+*.log
