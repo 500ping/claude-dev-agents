@@ -20,6 +20,7 @@ export function inputHeight(text: string): number {
 interface Props {
   role: Role;
   model: string;
+  effort: string | null;
   status: Status;
   entries: Entry[];
   input: InputState;
@@ -92,7 +93,7 @@ export function Pane(p: Props) {
     >
       <Box justifyContent="space-between" height={1}>
         <Text bold color={p.focused ? 'cyan' : undefined} wrap="truncate-end">
-          ● {ROLE_LABEL[p.role]} · {p.model}
+          ● {ROLE_LABEL[p.role]} · {p.model}{p.effort ? ` · ${p.effort}` : ''}
         </Text>
         <Text color={STATUS_COLOR[p.status]}>{offset > 0 ? `↑${offset} · ` : ''}{STATUS_TEXT[p.status]}</Text>
       </Box>

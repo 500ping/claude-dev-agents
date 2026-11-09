@@ -4,14 +4,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { collectChanges } from './changes.js';
 import { claudeBin, runClaude, type RunResult } from './claude.js';
-import { setConfigValue, type Config, type Scope } from './config.js';
+import { setConfigValue, validateValue, type Config, type Scope } from './config.js';
 import { interactiveArgs, loadPrompt, toolPolicy, type TurnMode } from './roles.js';
 import {
-  NUDGE, NUDGE_RESULT, STAGES, buildStagePrompt, extractArtifact, isBlocked, noteKey, parseTasks, parseTestResult,
+  NUDGE, NUDGE_RESULT, STAGES, buildStagePrompt, extractArtifact, extractFolder, isBlocked, noteKey, parseTasks, parseTestResult,
   parseVerdict, versionedName, wrapSideChat, wrapUserReply, type PromptCtx,
 } from './stages.js';
 import {
-  RunStore, listRuns, loadRunState, newRunId, pickDocsDir, type RunState,
+  RunStore, listRuns, loadRunState, newRunId, pickDocsDir, topicSlug, type RunState,
 } from './state.js';
 import { ROLES, ROLE_LABEL, type Entry, type EntryKind, type Role, type StageId, type Status } from './types.js';
 
@@ -184,6 +184,14 @@ export class Engine extends EventEmitter {
     if (!model.trim()) throw new Error('Model must not be empty.');
     this.config.roles[role].model = model.trim();
     if (save) setConfigValue(save, this.cwd, `roles.${role}.model`, JSON.stringify(model.trim()));
+    this.emit('change');
+  }
+
+  /** `null` goes back to Claude's default effort. */
+  setEffort(role: Role, effort: string | null, save?: Scope): void {
+    validateValue(`roles.${role}.effort`, effort);
+    this.config.roles[role].effort = effort;
+    if (save) setConfigValue(save, this.cwd, `roles.${role}.effort`, JSON.stringify(effort));
     this.emit('change');
   }
 
@@ -410,7 +418,7 @@ export class Engine extends EventEmitter {
 
   private startRun(requirement: string): void {
     const id = newRunId(requirement);
-    const docsDir = pickDocsDir(this.cwd, this.config.docsDir, requirement);
+    const docsDir = pickDocsDir(this.cwd, this.config.docsDir, topicSlug(requirement));
     const store = new RunStore(this.cwd, id, docsDir);
     const state: RunState = {
       id, requirement, docsDir, stage: 'clarify', phase: 'running', aborted: false,
@@ -458,6 +466,20 @@ export class Engine extends EventEmitter {
     const base = STAGES[stage].artifact;
     if (!base) return null;
     return stage === 'review' ? versionedName(base, this.state.fixesDone + 1) : base;
+  }
+
+  /**
+   * The Tech Lead names the docs folder when it delivers the requirements. Until the first document is written the
+   * folder is only a placeholder (derived from the requirement); once documents exist the name is final.
+   */
+  private nameDocsFolder(folder: string | null): void {
+    if (!this.state.docsDir || this.store.hasDocs()) return;
+    const root = this.config.docsDir.replace(/\/+$/, '');
+    const rel = pickDocsDir(this.cwd, root, folder ?? topicSlug(this.state.requirement));
+    if (rel === this.state.docsDir) return;
+    this.state.docsDir = rel;
+    this.store.setDocsDir(rel);
+    this.saveState();
   }
 
   private stageNote(stage: StageId): string {
@@ -628,6 +650,7 @@ export class Engine extends EventEmitter {
       if (!res.interrupted && def.artifact && file) {
         const art = extractArtifact(res.text, def.artifact);
         if (art) {
+          if (stage === 'clarify') this.nameDocsFolder(extractFolder(res.text, def.artifact));
           this.store.write(file, art);
           this.store.appendEvent({ type: 'artifact', stage, file });
           this.note(role, `✔ ${file} saved`);
@@ -785,6 +808,7 @@ export class Engine extends EventEmitter {
       cwd: this.cwd,
       prompt,
       model: this.config.roles[role].model,
+      effort: this.config.roles[role].effort,
       systemPrompt: system,
       allowedTools: policy.allowed,
       disallowedTools: policy.disallowed,

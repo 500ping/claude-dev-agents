@@ -28,10 +28,18 @@ export function versionedName(name: string, round: number): string {
   return name.replace(/(\.[^.]+)$/, `-${round}$1`);
 }
 
+const ARTIFACT_RE = /<artifact\s+name="([^"]+)"([^>]*)>([\s\S]*?)<\/artifact>/g;
+
 export function extractArtifact(text: string, name: string): string | null {
-  const re = /<artifact\s+name="([^"]+)"\s*>([\s\S]*?)<\/artifact>/g;
   let found: string | null = null;
-  for (const m of text.matchAll(re)) if (m[1] === name) found = m[2]!.trim();
+  for (const m of text.matchAll(ARTIFACT_RE)) if (m[1] === name) found = m[3]!.trim();
+  return found;
+}
+
+/** The `folder="…"` the Tech Lead put on an artifact tag: the name for the docs folder. */
+export function extractFolder(text: string, name: string): string | null {
+  let found: string | null = null;
+  for (const m of text.matchAll(ARTIFACT_RE)) if (m[1] === name) found = /\bfolder="([^"]+)"/.exec(m[2]!)?.[1] ?? null;
   return found;
 }
 
@@ -92,6 +100,11 @@ const notes = (name: string, body: string | undefined) =>
 const ARTIFACT_RULE = (name: string) =>
   `Deliver the result as <artifact name="${name}">…</artifact> (the complete document, nothing else inside the tags).`;
 
+const FOLDER_RULE =
+  ` Put a folder attribute on the tag, a short technical name for this piece of work in lowercase kebab-case, ` +
+  `2-4 words, like a ticket or module name (e.g. <artifact name="requirements.md" folder="otp-login-flow">). ` +
+  `Never copy the user's sentence; the folder holds requirements.md, design.md and review.md.`;
+
 const NO_FILES = 'Do NOT create report or summary files; your final message is the report.';
 
 function changesBlock(c: PromptCtx['changes']): string {
@@ -128,8 +141,8 @@ export function buildStagePrompt(stage: StageId, c: PromptCtx): string {
             `${c.previousWork.map((l) => `- ${l}`).join('\n')}\n\n`
           : '') +
         (c.autoApprove
-          ? `Auto-approve is ON: do NOT ask questions. Make reasonable assumptions and record them under "Assumptions". ${ARTIFACT_RULE('requirements.md')}`
-          : `Clarify the requirement. If something that would change the design is unclear, ask numbered questions and wait (no artifact yet). Once clear, ${ARTIFACT_RULE('requirements.md')}`);
+          ? `Auto-approve is ON: do NOT ask questions. Make reasonable assumptions and record them under "Assumptions". ${ARTIFACT_RULE('requirements.md')}${FOLDER_RULE}`
+          : `Clarify the requirement. If something that would change the design is unclear, ask numbered questions and wait (no artifact yet). Once clear, ${ARTIFACT_RULE('requirements.md')}${FOLDER_RULE}`);
     case 'design':
       return `${head}${doc('requirements.md', c.artifacts['requirements.md'])}\n\n` +
         `Explore the codebase, then design the solution. Use \`### T1 — title\` headings for tasks. ${ARTIFACT_RULE('design.md')}`;

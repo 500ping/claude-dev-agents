@@ -24,6 +24,7 @@ export function interactiveArgs(role: Role, config: Config, cwd: string, session
   return [
     '--resume', sessionId,
     '--model', config.roles[role].model,
+    ...(config.roles[role].effort ? ['--effort', config.roles[role].effort!] : []),
     '--append-system-prompt', loadPrompt(role, cwd, config),
     ...(disallowed.length ? ['--disallowedTools', disallowed.join(',')] : []),
   ];

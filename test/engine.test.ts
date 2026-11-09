@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadRunState } from '../src/state.js';
@@ -137,6 +137,20 @@ describe('workflow (manual approval)', () => {
     await until(() => calls().some((c) => c.stage === 'fix'));
     expect(calls().find((c) => c.stage === 'fix')!.prompt).toContain("WON'T FIX");
     e.abort(); await e.whenSettled();
+  });
+});
+
+describe('effort', () => {
+  it('is passed to claude per role and follows changes made between turns', async () => {
+    const { engine: e, calls } = await setup({}, true);
+    e.setEffort('techlead', 'high');
+    e.submit('techlead', 'Add OTP login');
+    await until(() => calls().some((c) => c.stage === 'design'));
+    e.setEffort('techlead', null);
+    await e.whenSettled();
+    const c = calls();
+    expect(c.find((x) => x.stage === 'clarify').effort).toBe('high');
+    expect(c.find((x) => x.stage === 'implement').effort).toBeUndefined();
   });
 });
 
@@ -327,6 +341,46 @@ describe('Tech Lead documents live in the project docs folder', () => {
     await e.whenSettled();
     expect(readFileSync(join(cwd, 'docs', 'add-otp-login', 'design.md'), 'utf8')).toBe('FIRST RUN DESIGN');
     expect(existsSync(join(cwd, 'docs', 'add-otp-login-2', 'design.md'))).toBe(true);
+  });
+
+  it('uses the technical folder name the Tech Lead gives, not the user prompt', async () => {
+    const { engine: e, cwd, calls } = await setup({ FAKE_FOLDER: 'otp-login-flow' }, true);
+    e.submit('techlead', 'I want users to be able to log in with a one time password sent by SMS please');
+    await e.whenSettled();
+    expect(calls().find((c) => c.stage === 'clarify').prompt).toContain('folder attribute');
+    expect(e.run!.state.docsDir).toBe('docs/otp-login-flow');
+    for (const f of ['requirements.md', 'design.md', 'review.md']) {
+      expect(existsSync(join(cwd, 'docs', 'otp-login-flow', f)), f).toBe(true);
+    }
+    expect(readdirSync(join(cwd, 'docs'))).toEqual(['otp-login-flow']); // no folder left under the prompt's name
+  });
+
+  it('sanitises the folder name and avoids clashing with an existing folder', async () => {
+    const { engine: e, cwd } = await setup({ FAKE_FOLDER: '../../Etc/OTP Login!!' }, true);
+    mkdirSync(join(cwd, 'docs', 'etc-otp-login'), { recursive: true });
+    e.submit('techlead', 'x');
+    await e.whenSettled();
+    expect(e.run!.state.docsDir).toBe('docs/etc-otp-login-2');
+    expect(existsSync(join(cwd, 'docs', 'etc-otp-login-2', 'requirements.md'))).toBe(true);
+  });
+
+  it('without a folder from the Tech Lead the name is the requirement minus filler words', async () => {
+    const { engine: e } = await setup({}, true);
+    e.submit('techlead', 'I want to add the OTP login for the mobile app please');
+    await e.whenSettled();
+    expect(e.run!.state.docsDir).toBe('docs/add-otp-login-mobile-app');
+  });
+
+  it('keeps the folder once documents exist (a rejected clarify does not move it)', async () => {
+    const { engine: e } = await setup({ FAKE_FOLDER: 'first-name' });
+    e.submit('techlead', 'Add OTP login');
+    await nextGate(e, 'clarify');
+    expect(e.run!.state.docsDir).toBe('docs/first-name');
+    process.env.FAKE_FOLDER = 'second-name';
+    e.decide('r', 'be more specific');
+    await nextGate(e, 'clarify');
+    expect(e.run!.state.docsDir).toBe('docs/first-name');
+    e.abort(); await e.whenSettled();
   });
 
   it('honours the docsDir config and resumes with the stored folder', async () => {

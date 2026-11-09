@@ -5,6 +5,8 @@ export interface RunOptions {
   cwd: string;
   prompt: string;
   model: string;
+  /** `--effort` level; null/undefined = Claude's default. */
+  effort?: string | null;
   systemPrompt: string;
   allowedTools: string[];
   disallowedTools: string[];
@@ -53,6 +55,7 @@ export function buildArgs(o: Omit<RunOptions, 'cwd' | 'prompt' | 'signal' | 'onE
     '--verbose',
     '--include-partial-messages',
     '--model', o.model,
+    ...(o.effort ? ['--effort', o.effort] : []),
     '--append-system-prompt', o.systemPrompt,
     '--permission-mode', o.permissionMode,
   ];

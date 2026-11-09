@@ -6,7 +6,7 @@ import { Command } from 'commander';
 import { render } from 'ink';
 import { CLAUDE_MISSING_MESSAGE, claudeAvailable } from './claude.js';
 import {
-  DEFAULT_CONFIG, getPath, leafPaths, loadConfig, resetConfig, setConfigValue, techleadWarnings, userDir,
+  DEFAULT_CONFIG, EFFORTS, getPath, leafPaths, loadConfig, resetConfig, setConfigValue, techleadWarnings, userDir, validateValue,
   type Scope,
 } from './config.js';
 import { Engine } from './engine.js';
@@ -22,6 +22,8 @@ interface CommonOpts {
   autoApprove?: boolean;
   techleadModel?: string;
   devModel?: string;
+  techleadEffort?: string;
+  devEffort?: string;
   cwd?: string;
   verbose?: boolean;
   layout?: string;
@@ -42,6 +44,8 @@ function withCommon(cmd: Command): Command {
     .option('--auto-approve', 'skip all approval gates')
     .option('--techlead-model <model>', 'Tech Lead model for this session')
     .option('--dev-model <model>', 'Senior Dev model for this session')
+    .option('--techlead-effort <level>', 'Tech Lead effort for this session (low|medium|high|xhigh|max)')
+    .option('--dev-effort <level>', 'Senior Dev effort for this session (low|medium|high|xhigh|max)')
     .option('--cwd <path>', 'project directory (default: current directory)')
     .option('--verbose', 'show raw tool inputs')
     .option('--layout <layout>', 'split | tabs (default: automatic by terminal width)')
@@ -57,8 +61,14 @@ async function startTui(opts: CommonOpts, first?: { requirement?: string; resume
   if (opts.layout && !['split', 'tabs'].includes(opts.layout)) fail('--layout must be "split" or "tabs".');
 
   const flags: Record<string, unknown> = {};
-  if (opts.techleadModel) flags.roles = { techlead: { model: opts.techleadModel } };
-  if (opts.devModel) flags.roles = { ...(flags.roles as object), dev: { model: opts.devModel } };
+  for (const [role, model, effort] of [['techlead', opts.techleadModel, opts.techleadEffort], ['dev', opts.devModel, opts.devEffort]] as const) {
+    if (effort) {
+      try { validateValue(`roles.${role}.effort`, effort); } catch (e) { fail((e as Error).message); }
+    }
+    if (model || effort) {
+      flags.roles = { ...(flags.roles as object), [role]: { ...(model ? { model } : {}), ...(effort ? { effort } : {}) } };
+    }
+  }
   if (opts.autoApprove) flags.workflow = { autoApprove: true };
   if (opts.layout) flags.ui = { layout: opts.layout };
 
@@ -117,8 +127,10 @@ async function interactiveConfig(cwd: string, scope: Scope): Promise<void> {
       console.log(`\nConfiguring ${scope} settings`);
       console.log(`  1) Tech Lead model : ${config.roles.techlead.model} (${sources['roles.techlead.model']})`);
       console.log(`  2) Senior Dev model: ${config.roles.dev.model} (${sources['roles.dev.model']})`);
-      console.log(`  3) Test command    : ${config.testCommand ?? '(detect)'}`);
-      console.log(`  4) Auto-approve    : ${config.workflow.autoApprove}`);
+      console.log(`  3) Tech Lead effort: ${config.roles.techlead.effort ?? 'default'} (${sources['roles.techlead.effort']})`);
+      console.log(`  4) Senior Dev effort: ${config.roles.dev.effort ?? 'default'} (${sources['roles.dev.effort']})`);
+      console.log(`  5) Test command    : ${config.testCommand ?? '(detect)'}`);
+      console.log(`  6) Auto-approve    : ${config.workflow.autoApprove}`);
       console.log('  q) Quit');
       const choice = (await ask('> ')).toLowerCase();
       if (choice === 'q' || choice === '') return;
@@ -132,10 +144,18 @@ async function interactiveConfig(cwd: string, scope: Scope): Promise<void> {
           let model = n >= 1 && n <= MODELS.length ? MODELS[n - 1]! : pick;
           if (n === MODELS.length + 1) model = await ask('Model ID: ');
           setConfigValue(scope, cwd, key, JSON.stringify(model));
-        } else if (choice === '3') {
+        } else if (choice === '3' || choice === '4') {
+          const key = choice === '3' ? 'roles.techlead.effort' : 'roles.dev.effort';
+          const levels = [...EFFORTS, 'default'];
+          levels.forEach((l, i) => console.log(`  ${i + 1}) ${l}${l === 'default' ? " (Claude's default for the model)" : ''}`));
+          const pick = await ask('Effort: ');
+          const n = Number(pick);
+          const level = n >= 1 && n <= levels.length ? levels[n - 1]! : pick.toLowerCase();
+          setConfigValue(scope, cwd, key, level === 'default' ? 'null' : JSON.stringify(level));
+        } else if (choice === '5') {
           const cmd = await ask('Test command (empty to auto-detect): ');
           setConfigValue(scope, cwd, 'testCommand', cmd ? JSON.stringify(cmd) : 'null');
-        } else if (choice === '4') {
+        } else if (choice === '6') {
           setConfigValue(scope, cwd, 'workflow.autoApprove', String(!config.workflow.autoApprove));
         } else {
           console.log('Unknown choice.');

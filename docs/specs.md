@@ -80,6 +80,7 @@ cd-agents --version | --help
 | `--auto-approve` | Skip all approval gates (see §8.3) |
 | `--techlead-model <model>` | Override the Tech Lead model for this session only |
 | `--dev-model <model>` | Override the Senior Dev model for this session only |
+| `--techlead-effort <level>` · `--dev-effort <level>` | Override a role's effort (`low`, `medium`, `high`, `xhigh`, `max`) for this session only |
 | `--cwd <path>` | Project directory (default: current directory) |
 | `--verbose` | Show raw tool calls and agent output |
 | `--new` | Start a new chat without asking about saved sessions (see §5.0) |
@@ -125,7 +126,7 @@ The screen is split into **two side-by-side chat panes**: **Tech Lead on the lef
 
 ### Layout
 - **Header (full width):** run id, current stage with task progress (e.g. `③ IMPLEMENT (2/5 tasks)`), and approval mode (`manual` / `auto`).
-- **Pane header:** role name, model, and live status: `idle`, `thinking…`, `working…` (running tools), `waiting for you`, `blocked`, or `done`.
+- **Pane header:** role name, model, effort (when set), and live status: `idle`, `thinking…`, `working…` (running tools), `waiting for you`, `blocked`, or `done`.
 - **Pane transcript:** only that role's conversation: your messages to it, its replies, its tool-call summaries, and stage markers such as `✔ design.md saved`. Output streams in live. Tool calls are collapsed to one line (expand with `Enter` on the line, or use `--verbose`).
 - **Pane input:** a multiline input box at the bottom of each pane.
 - **Action bar (full width, bottom):** key hints, a task checklist (`✔` done, `●` in progress, `○` pending), and the **approval gate** when one is open (see §8.2). Gates appear here, not inside a pane, because a gate concerns the whole run.
@@ -192,7 +193,8 @@ If the terminal is narrower than `ui.splitMinColumns` (default 120), the layout 
 | `/focus techlead\|dev` | Move focus to a pane (same as `Tab`) |
 | `/clear [techlead\|dev]` | Clear a pane's visible transcript. The log on disk and the role's session are kept. |
 | `/config` | Open the interactive config menu (same as `cd-agents config`) |
-| `/model techlead <model> [--save]` · `/model dev <model> [--save]` | Change a role's model for this session; `--save` also stores it as the user default |
+| `/model techlead <model> [--effort <level>] [--save]` · `/model dev …` | Change a role's model (and optionally its effort) for this session; `--save` also stores it as the user default |
+| `/effort techlead <level> [--save]` · `/effort dev <level>` | Change a role's effort: `low`, `medium`, `high`, `xhigh`, `max`, or `default` (Claude's own default). Takes effect on the role's next turn. Without arguments, shows both. |
 | `/status` | Show run id, stage, models, and artifact paths |
 | `/approve` | Approve the current gate (same as answering `y`) |
 | `/reject <feedback>` | Reject the current gate and send feedback to the role that produced it |
@@ -221,6 +223,7 @@ If the terminal is narrower than `ui.splitMinColumns` (default 120), the layout 
   "roles": {
     "techlead": {
       "model": "opus",
+      "effort": null,
       "systemPromptFile": null,
       "allowedTools": ["Read", "Grep", "Glob", "WebSearch", "WebFetch",
         "Bash(git diff:*)", "Bash(git status:*)", "Bash(git log:*)", "Bash(git show:*)"],
@@ -228,6 +231,7 @@ If the terminal is narrower than `ui.splitMinColumns` (default 120), the layout 
     },
     "dev": {
       "model": "sonnet",
+      "effort": null,
       "systemPromptFile": null,
       "allowedTools": ["Read", "Grep", "Glob", "Edit", "Write", "Bash"],
       "permissionMode": "acceptEdits"
@@ -250,6 +254,7 @@ If the terminal is narrower than `ui.splitMinColumns` (default 120), the layout 
 ```
 
 - `model` accepts any value that `claude --model` accepts (aliases such as `opus` and `sonnet`, or full model IDs).
+- `effort` is Claude Code's `--effort` level for that role: `low`, `medium`, `high`, `xhigh` or `max`. `null` (the default) passes no flag, so Claude uses its default for the model. Higher effort means deeper reasoning, slower turns and more cost; a typical split is a high effort for the Tech Lead's design/review and a lower one for routine implementation. It applies to every turn of the role, including side chats, compaction and `/claude`.
 - `systemPromptFile: null` means use the default prompt (see §7).
 - `testCommand` (e.g. `npm test`): if `null`, the Senior Dev detects it from the project.
 - `docsDir`: project-relative folder for the Tech Lead's documents (§10). Must stay inside the project.
@@ -269,7 +274,7 @@ cd-agents config reset                   Restore defaults (asks for confirmation
 cd-agents config --project ...           Write to the project config instead of the user config
 ```
 
-The interactive menu lists the available models (`opus`, `sonnet`, `haiku`, plus "custom ID…") for each role.
+The interactive menu lists the available models (`opus`, `sonnet`, `haiku`, plus "custom ID…") and the effort levels (`low` … `max`, or `default`) for each role.
 
 ## 7. Roles and system prompts
 
@@ -386,7 +391,7 @@ Each agent turn spawns:
 
 ```
 claude -p --output-format stream-json --verbose --include-partial-messages \
-  --model <role.model> \
+  --model <role.model> [--effort <role.effort>] \
   --append-system-prompt "<role system prompt>" \
   --permission-mode <role.permissionMode> \
   --allowedTools "<comma-joined list>" --disallowedTools "<comma-joined list>" \
@@ -428,7 +433,7 @@ The prompt (stage instructions, artifact contents, user feedback) is written to 
 ```
 
 - `run-id` format: `YYYYMMDD-HHMMSS-<slug>`.
-- The Tech Lead's documents go to `<docsDir>/<slug>/` (default `docs/<slug>/`), where `<slug>` comes from the requirement. If that folder already exists (an earlier run, or a hand-written one), `-2`, `-3`, … is appended, so earlier documents are never overwritten. Gates, edits (`[e]`) and later stages all read these files. The folder is recorded in `state.json`, so `resume` finds it even if config changes.
+- The Tech Lead's documents go to `<docsDir>/<slug>/` (default `docs/<slug>/`), where `<slug>` is a short technical name (e.g. `otp-login-flow`, `sales-report-csv-export`), never the user's sentence. The Tech Lead chooses it: when it delivers `requirements.md` it puts a `folder="…"` attribute on the artifact tag (`<artifact name="requirements.md" folder="otp-login-flow">`). The CLI sanitises it to lowercase kebab-case (max 40 characters, no path separators) and creates the folder when the first document is saved; once any document exists the name is final, so a rejected-and-revised clarify does not move it. If the Tech Lead gives no folder, the name is the requirement without filler words (at most five words). If that folder already exists (an earlier run, or a hand-written one), `-2`, `-3`, … is appended, so earlier documents are never overwritten. Gates, edits (`[e]`) and later stages all read these files. The folder is recorded in `state.json`, so `resume` finds it even if config changes.
 - `state.json` is written after every stage and gate decision, so `cd-agents resume` continues from the last completed gate.
 - On first run in a project, the CLI suggests adding `.cd-agents/runs/` to `.gitignore`.
 

@@ -43,6 +43,7 @@ When a requirement finishes, both roles' conversations are compacted automatical
 
 Two commands for long sessions:
 - `/claude [techlead|dev]` — continue that role's chat in the real Claude Code (same session, same model), then come back to the panes. Outside the TUI: `cd-agents claude [techlead|dev]`.
+- `/effort techlead|dev <low|medium|high|xhigh|max|default> [--save]` — change a role's effort (also `/model dev sonnet --effort high`). Takes effect on that role's next turn.
 - `/compact [techlead|dev|all] [what to keep]` — compact a role's context, like Claude Code's `/compact`.
 
 ### Models and config
@@ -51,13 +52,14 @@ Two commands for long sessions:
 cd-agents config                              # interactive
 cd-agents config set roles.techlead.model opus
 cd-agents config set roles.dev.model sonnet
+cd-agents config set roles.techlead.effort high   # low | medium | high | xhigh | max (null = Claude's default)
 cd-agents config show                         # effective values + where each comes from
-cd-agents --dev-model haiku                   # one session only
+cd-agents --dev-model haiku --dev-effort low   # one session only
 ```
 
 Precedence: flags > `.cd-agents/config.json` (project) > `~/.cd-agents/config.json` (user) > defaults. Override a role prompt by putting `techlead.md` / `dev.md` in `~/.cd-agents/prompts/` or `.cd-agents/prompts/`.
 
-The Tech Lead's documents (`requirements.md`, `design.md`, `review.md`) are written to `docs/<requirement-slug>/` in your project (change with `cd-agents config set docsDir <path>`), so you can commit them. Run bookkeeping — transcripts, session state, the Senior Dev's final messages — is in `.cd-agents/runs/<id>/` (the Senior Dev writes no report files); add `.cd-agents/runs/` to your `.gitignore`.
+The Tech Lead's documents (`requirements.md`, `design.md`, `review.md`) are written to `docs/<technical-name>/` in your project (the Tech Lead names it, e.g. `docs/otp-login-flow/`, not after your prompt) (change with `cd-agents config set docsDir <path>`), so you can commit them. Run bookkeeping — transcripts, session state, the Senior Dev's final messages — is in `.cd-agents/runs/<id>/` (the Senior Dev writes no report files); add `.cd-agents/runs/` to your `.gitignore`.
 
 ## Develop
 

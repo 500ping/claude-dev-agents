@@ -28,9 +28,19 @@ export interface RunState {
 
 export const runsDir = (cwd: string) => join(projectDir(cwd), 'runs');
 
-export function slugify(s: string): string {
-  const slug = s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30).replace(/-+$/, '');
+export function slugify(s: string, max = 30): string {
+  const slug = s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max).replace(/-+$/, '');
   return slug || 'run';
+}
+
+const FILLER = new Set(['a', 'an', 'the', 'i', 'we', 'you', 'to', 'of', 'for', 'in', 'on', 'with', 'and', 'or', 'so', 'that', 'this',
+  'it', 'is', 'be', 'can', 'could', 'would', 'should', 'please', 'want', 'need', 'like', 'also', 'some', 'my', 'our', 'when', 'how']);
+
+/** Folder name when the Tech Lead didn't give one: the requirement without filler words, at most five words. */
+export function topicSlug(requirement: string): string {
+  const words = requirement.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const kept = words.filter((w) => !FILLER.has(w)).slice(0, 5);
+  return slugify((kept.length ? kept : words.slice(0, 5)).join('-'), 40);
 }
 
 export function newRunId(requirement: string, now = new Date()): string {
@@ -43,9 +53,9 @@ export function newRunId(requirement: string, now = new Date()): string {
 export const isTechLeadDoc = (name: string): boolean => /^(requirements|design|review(-\d+)?)\.md$/.test(name);
 
 /** `docs/<slug>`, or `docs/<slug>-2`, … if that folder already exists. */
-export function pickDocsDir(cwd: string, base: string, requirement: string): string {
+export function pickDocsDir(cwd: string, base: string, name: string): string {
   const root = base.replace(/\/+$/, '');
-  const slug = slugify(requirement);
+  const slug = slugify(name, 40);
   let rel = `${root}/${slug}`;
   for (let n = 2; existsSync(join(cwd, rel)); n++) rel = `${root}/${slug}-${n}`;
   return rel;
@@ -53,12 +63,15 @@ export function pickDocsDir(cwd: string, base: string, requirement: string): str
 
 export class RunStore {
   readonly dir: string;
-  readonly docs?: string;
-  constructor(cwd: string, readonly id: string, docsDir?: string) {
+  docs?: string;
+  constructor(private readonly cwd: string, readonly id: string, docsDir?: string) {
     this.dir = join(runsDir(cwd), id);
     mkdirSync(this.dir, { recursive: true });
     if (docsDir) this.docs = join(cwd, docsDir);
   }
+  /** Point the Tech Lead's documents at another folder (only before any has been written). */
+  setDocsDir(rel: string): void { this.docs = join(this.cwd, rel); }
+  hasDocs(): boolean { return !!this.docs && existsSync(this.docs) && readdirSync(this.docs).some(isTechLeadDoc); }
   path(name: string): string {
     return this.docs && isTechLeadDoc(name) ? join(this.docs, name) : join(this.dir, name);
   }

@@ -15,7 +15,7 @@ export function setup(env: Record<string, string> = {}, autoApprove = false, aut
     CD_AGENTS_HOME: home,
     CD_AGENTS_CLAUDE_BIN: FAKE,
     FAKE_CLAUDE_LOG: join(root, 'calls.jsonl'),
-    FAKE_ASK: '', FAKE_VERDICTS: '', FAKE_TEST_RESULT: '', FAKE_FAIL_STAGE: '',
+    FAKE_FOLDER: '', FAKE_ASK: '', FAKE_VERDICTS: '', FAKE_TEST_RESULT: '', FAKE_FAIL_STAGE: '',
     ...env,
   });
   return import('node:fs').then((fs) => {

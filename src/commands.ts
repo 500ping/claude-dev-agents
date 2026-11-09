@@ -16,7 +16,8 @@ const HELP = `Commands (work from either pane):
   /focus techlead|dev           move focus (same as Tab)
   /clear [techlead|dev]         clear a pane's visible transcript
   /config                       show effective configuration
-  /model techlead|dev <model> [--save]   change a role's model (--save keeps it as default)
+  /model techlead|dev <model> [--effort <level>] [--save]   change a role's model (and effort); --save keeps it as default
+  /effort techlead|dev <low|medium|high|xhigh|max|default> [--save]   change a role's effort
   /claude [techlead|dev]        continue that role's chat in the real Claude Code, then come back here
   /compact [techlead|dev|all] [what to keep]   compact a role's conversation context
   /status                       run id, stage, models, cost
@@ -56,23 +57,46 @@ export function runCommand(engine: Engine, line: string, ctx: CommandCtx): void 
       const { sources } = loadConfig(engine.cwd);
       const c = engine.config;
       const lines = ROLES.map((r) =>
-        `${r === 'techlead' ? 'Tech Lead' : 'Senior Dev'}: model=${c.roles[r].model} (${sources[`roles.${r}.model`]}) prompt=${safePrompt(engine, r)}`);
+        `${r === 'techlead' ? 'Tech Lead' : 'Senior Dev'}: model=${c.roles[r].model} (${sources[`roles.${r}.model`]}) effort=${c.roles[r].effort ?? 'default'} (${sources[`roles.${r}.effort`]}) prompt=${safePrompt(engine, r)}`);
       lines.push(
         `approval: ${engine.autoApprove ? 'auto' : 'manual'} · maxFix=${c.workflow.maxFixIterations} · maxReview=${c.workflow.maxReviewIterations}`,
         `testCommand: ${c.testCommand ?? '(detect)'} · layout=${c.ui.layout}`,
-        `Change a model with /model, or run "cd-agents config set <key> <value>" for anything else.`,
+        `Change a model or effort with /model and /effort, or run "cd-agents config set <key> <value>" for anything else.`,
       );
       return say(lines.join('\n'));
     }
     case 'model': {
-      if (!rest.length) return say(`Tech Lead = ${engine.config.roles.techlead.model} · Senior Dev = ${engine.config.roles.dev.model}`);
+      const label = (r: Role) => (r === 'techlead' ? 'Tech Lead' : 'Senior Dev');
+      const show = (r: Role) => `${engine.config.roles[r].model} · effort ${engine.config.roles[r].effort ?? 'default'}`;
+      if (!rest.length) return say(`Tech Lead = ${show('techlead')} · Senior Dev = ${show('dev')}`);
       const role = toRole(rest[0]);
       const save = rest.includes('--save');
-      const model = rest.slice(1).filter((x) => x !== '--save')[0];
-      if (!role || !model) return say('Usage: /model techlead|dev <model> [--save]');
+      const effortAt = rest.indexOf('--effort');
+      const effort = effortAt >= 0 ? rest[effortAt + 1] : undefined;
+      const model = rest.slice(1).filter((x, i, a) => x !== '--save' && x !== '--effort' && a[i - 1] !== '--effort')[0];
+      if (!role || !model || (effortAt >= 0 && !effort)) return say('Usage: /model techlead|dev <model> [--effort <level>] [--save]');
       try {
-        engine.setModel(role, model, save ? ('user' as Scope) : undefined);
-        return say(`${role === 'techlead' ? 'Tech Lead' : 'Senior Dev'} model → ${model}${save ? ' (saved as default)' : ' (this session only; add --save to keep)'}`);
+        const scope = save ? ('user' as Scope) : undefined;
+        const level = effort === undefined ? undefined : /^(default|none|null)$/i.test(effort) ? null : effort.toLowerCase();
+        if (level !== undefined) engine.setEffort(role, level, scope);
+        engine.setModel(role, model, scope);
+        return say(`${label(role)} → ${show(role)}${save ? ' (saved as default)' : ' (this session only; add --save to keep)'}`);
+      } catch (e) { return say((e as Error).message); }
+    }
+    case 'effort': {
+      const label = (r: Role) => (r === 'techlead' ? 'Tech Lead' : 'Senior Dev');
+      const role = toRole(rest[0]);
+      const save = rest.includes('--save');
+      const level = rest.slice(1).filter((x) => x !== '--save')[0];
+      if (!role) {
+        const f = (r: Role) => engine.config.roles[r].effort ?? 'default';
+        return say(`Effort: Tech Lead = ${f('techlead')} · Senior Dev = ${f('dev')}\nUsage: /effort techlead|dev <low|medium|high|xhigh|max|default> [--save]`);
+      }
+      if (!level) return say('Usage: /effort techlead|dev <low|medium|high|xhigh|max|default> [--save]');
+      try {
+        const value = /^(default|none|null)$/i.test(level) ? null : level.toLowerCase();
+        engine.setEffort(role, value, save ? ('user' as Scope) : undefined);
+        return say(`${label(role)} effort → ${value ?? 'default'}${save ? ' (saved as default)' : ' (this session only; add --save to keep)'}`);
       } catch (e) { return say((e as Error).message); }
     }
     case 'claude': {

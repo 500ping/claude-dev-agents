@@ -287,6 +287,7 @@ export function App({ engine, verbose, layout, splitMinColumns, autoFocus, start
       key={r}
       role={r}
       model={engine.config.roles[r].model}
+      effort={engine.config.roles[r].effort}
       status={engine.status[r]}
       entries={engine.panes[r]}
       input={inputs[r]}

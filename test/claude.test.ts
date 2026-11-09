@@ -14,6 +14,13 @@ describe('buildArgs', () => {
     expect(first).not.toContain('--resume');
     expect(buildArgs({ ...base, resume: true })).toContain('--resume');
   });
+  it('passes --effort only when set', () => {
+    const none = buildArgs({ ...base, resume: false });
+    expect(none).not.toContain('--effort');
+    expect(buildArgs({ ...base, effort: null, resume: false })).not.toContain('--effort');
+    const a = buildArgs({ ...base, effort: 'high', resume: false });
+    expect(a[a.indexOf('--effort') + 1]).toBe('high');
+  });
   it('passes model, prompt, tools and mode as single args', () => {
     const a = buildArgs({ ...base, resume: false });
     expect(a[a.indexOf('--model') + 1]).toBe('opus');

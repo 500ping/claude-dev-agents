@@ -26,7 +26,7 @@ const isCompact = prompt.trim().startsWith('/compact');
 const stage = isCompact ? 'compact' : prompt.match(/<stage>(\w+)<\/stage>/)?.[1];
 const side = prompt.includes('<mode>side-chat</mode>');
 const sessionId = arg('--session-id') ?? arg('--resume');
-const rec = { model: arg('--model'), resume: args.includes('--resume'), sessionId, stage: side ? 'side' : stage,
+const rec = { model: arg('--model'), effort: arg('--effort'), resume: args.includes('--resume'), sessionId, stage: side ? 'side' : stage,
   allowed: arg('--allowedTools'), disallowed: arg('--disallowedTools'), permissionMode: arg('--permission-mode'),
   system: (arg('--append-system-prompt') ?? '').slice(0, 40), prompt, cwd: process.cwd() };
 if (log) appendFileSync(log, JSON.stringify(rec) + '\n');
@@ -35,7 +35,7 @@ const priorCalls = (st) => log && existsSync(log)
 
 await new Promise((r) => setTimeout(r, Number(process.env.FAKE_DELAY || 0)));
 const out = (o) => process.stdout.write(JSON.stringify(o) + '\n');
-const art = (name, body) => `<artifact name="${name}">\n${body}\n</artifact>`;
+const art = (name, body) => `<artifact name="${name}"${name === 'requirements.md' && process.env.FAKE_FOLDER ? ` folder="${process.env.FAKE_FOLDER}"` : ''}>\n${body}\n</artifact>`;
 
 if (process.env.FAKE_FAIL_STAGE === stage && !existsSync(join(process.cwd(), '.failed-once'))) {
   writeFileSync(join(process.cwd(), '.failed-once'), '1');

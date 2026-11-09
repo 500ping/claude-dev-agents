@@ -59,6 +59,17 @@ describe('config', () => {
     expect(() => setConfigValue('user', cwd, 'roles.dev.allowedTools', '"Read"')).toThrow(/array/);
   });
 
+  it('effort defaults to null, accepts the Claude levels, rejects anything else', () => {
+    expect(loadConfig(cwd).config.roles.dev.effort).toBeNull();
+    setConfigValue('user', cwd, 'roles.techlead.effort', 'xhigh');
+    expect(loadConfig(cwd).config.roles.techlead.effort).toBe('xhigh');
+    expect(loadConfig(cwd).sources['roles.techlead.effort']).toBe('user');
+    setConfigValue('user', cwd, 'roles.techlead.effort', 'null');
+    expect(loadConfig(cwd).config.roles.techlead.effort).toBeNull();
+    expect(() => setConfigValue('user', cwd, 'roles.dev.effort', 'extreme')).toThrow(/Effort must be one of/);
+    expect(() => setConfigValue('user', cwd, 'roles.dev.effort', '3')).toThrow(/must be a string or null|Effort must be/);
+  });
+
   it('docsDir defaults to docs and rejects paths outside the project', () => {
     expect(loadConfig(cwd).config.docsDir).toBe('docs');
     setConfigValue('user', cwd, 'docsDir', 'documentation');

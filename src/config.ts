@@ -3,8 +3,12 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Role } from './types.js';
 
+export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+
 export interface RoleConfig {
   model: string;
+  /** Claude's `--effort` level; null = Claude's default for the model. */
+  effort: string | null;
   systemPromptFile: string | null;
   allowedTools: string[];
   permissionMode: string;
@@ -36,12 +40,14 @@ export const DEFAULT_CONFIG: Config = {
   roles: {
     techlead: {
       model: 'opus',
+      effort: null,
       systemPromptFile: null,
       allowedTools: ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', ...GIT_READ_TOOLS],
       permissionMode: 'dontAsk',
     },
     dev: {
       model: 'sonnet',
+      effort: null,
       systemPromptFile: null,
       allowedTools: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash'],
       permissionMode: 'acceptEdits',
@@ -150,6 +156,9 @@ export function validateValue(key: string, value: unknown): void {
   }
   if (key.endsWith('.model') && (typeof value !== 'string' || !value.trim())) {
     throw new Error('Model must be a non-empty string.');
+  }
+  if (key.endsWith('.effort') && value !== null && !(EFFORTS as readonly string[]).includes(value as string)) {
+    throw new Error(`Effort must be one of: ${EFFORTS.join(', ')} (or null for Claude's default).`);
   }
   if (ENUMS[key] && !ENUMS[key].includes(value as string)) {
     throw new Error(`"${key}" must be one of: ${ENUMS[key].join(', ')}.`);

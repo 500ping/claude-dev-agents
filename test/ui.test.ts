@@ -106,6 +106,20 @@ describe('slash commands', () => {
     runCommand(engine, '/model nobody x', ctx);
     expect(engine.config.roles.dev.model).toBe('sonnet');
   });
+  it('/effort and /model --effort change the role effort', () => {
+    const { engine, ctx } = mk();
+    runCommand(engine, '/effort dev high', ctx);
+    expect(engine.config.roles.dev.effort).toBe('high');
+    runCommand(engine, '/effort dev bogus', ctx);
+    expect(engine.config.roles.dev.effort).toBe('high');
+    runCommand(engine, '/model techlead opus --effort max', ctx);
+    expect(engine.config.roles.techlead.effort).toBe('max');
+    expect(engine.config.roles.techlead.model).toBe('opus');
+    runCommand(engine, '/effort dev default', ctx);
+    expect(engine.config.roles.dev.effort).toBeNull();
+    runCommand(engine, '/model dev haiku --effort nope', ctx);
+    expect(engine.config.roles.dev.model).toBe('sonnet');
+  });
   it('/auto, /help, /status, unknown, /exit', () => {
     const { engine, ctx, say, exited } = mk();
     runCommand(engine, '/auto on', ctx);
